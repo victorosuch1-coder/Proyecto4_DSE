@@ -1,0 +1,130 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+entity vga_controller is
+    Port ( 
+        clk     : in  STD_LOGIC; -- Reloj de 100 MHz de la Nexys 4
+        rst     : in  STD_LOGIC; -- Botón de reset
+        hsinc   : out STD_LOGIC; -- Sincronismo horizontal
+        vsinc   : out STD_LOGIC; -- Sincronismo vertical
+        visible : out STD_LOGIC; -- '1' cuando estamos en zona de dibujo
+        Fila    : out STD_LOGIC_VECTOR (9 downto 0); -- Coordenada Y
+        col     : out STD_LOGIC_VECTOR (9 downto 0)  -- Coordenada X
+    );
+end vga_controller;
+
+architecture Behavioral of vga_controller is
+
+    -- =====================================================================
+    -- SEÑALES INTERNAS (Nombres basados en el diagrama de bloques)
+    -- =====================================================================
+    
+    -- 1. Contador de ciclos de reloj
+    signal cont_clk : integer range 0 to 3 := 0;
+    signal new_pxl  : std_logic;
+    
+    -- 2. Contador de píxeles (columnas)
+    signal cont_pxl    : integer range 0 to 799 := 0;
+    signal new_line    : std_logic;
+    signal visible_pxl : std_logic;
+    
+    -- 3. Contador de líneas (filas)
+    signal cont_line    : integer range 0 to 519 := 0;
+    signal visible_line : std_logic;
+
+begin
+
+    -- =====================================================================
+    -- BLOQUE 1: CONTADOR DE CICLOS DE RELOJ (Divisor a 25 MHz)
+    -- =====================================================================
+    
+    -- Proceso Secuencial (P_cont_clk)
+    P_cont_clk: process(clk, rst)
+    begin
+        if rst = '1' then
+            cont_clk <= 0;
+        elsif rising_edge(clk) then
+            if cont_clk = 3 then
+                cont_clk <= 0;
+            else
+                cont_clk <= cont_clk + 1;
+            end if;
+        end if;
+    end process;
+    
+    -- Sentencia Combinacional
+    new_pxl <= '1' when cont_clk = 3 else '0';
+
+    -- =====================================================================
+    -- BLOQUE 2: CONTADOR DE PÍXELES (Columnas) - 800 píxeles por línea
+    -- =====================================================================
+    
+    -- Proceso Secuencial (P_cont_pxl)
+    P_cont_pxl: process(clk, rst)
+    begin
+        if rst = '1' then
+            cont_pxl <= 0;
+        elsif rising_edge(clk) then
+            if new_pxl = '1' then
+                if cont_pxl = 799 then
+                    cont_pxl <= 0;
+                else
+                    cont_pxl <= cont_pxl + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+    
+    -- Sentencias Combinacionales
+    new_line <= '1' when (cont_pxl = 799 and new_pxl = '1') else '0';
+    
+    col <= std_logic_vector(to_unsigned(cont_pxl, 10));
+    
+    -- Tiempos VGA Estándar (640x480):
+    -- Área visible: 0 a 639
+    -- Front Porch:  640 a 655
+    -- Pulso Sync:   656 a 751 (Normalmente a '0' lógico)
+    -- Back Porch:   752 a 799
+    visible_pxl <= '1' when cont_pxl < 640 else '0';
+    hsinc       <= '0' when (cont_pxl >= 656 and cont_pxl < 752) else '1';
+
+    -- =====================================================================
+    -- BLOQUE 3: CONTADOR DE LÍNEAS (Filas) - 520 líneas por pantalla
+    -- =====================================================================
+    
+    -- Proceso Secuencial (P_cont_line)
+    P_cont_line: process(clk, rst)
+    begin
+        if rst = '1' then
+            cont_line <= 0;
+        elsif rising_edge(clk) then
+            if new_line = '1' then
+                if cont_line = 519 then
+                    cont_line <= 0;
+                else
+                    cont_line <= cont_line + 1;
+                end if;
+            end if;
+        end if;
+    end process;
+    
+    -- Sentencias Combinacionales
+    Fila <= std_logic_vector(to_unsigned(cont_line, 10));
+    
+    -- Tiempos VGA Estándar Vertical:
+    -- Área visible: 0 a 479
+    -- Front Porch:  480 a 489
+    -- Pulso Sync:   490 a 491 (Normalmente a '0' lógico)
+    -- Back Porch:   492 a 519 (Total 520, según el diagrama)
+    visible_line <= '1' when cont_line < 480 else '0';
+    vsinc        <= '0' when (cont_line >= 490 and cont_line < 492) else '1';
+
+    -- =====================================================================
+    -- SALIDA FINAL
+    -- =====================================================================
+    
+    -- Puerta AND del diagrama
+    visible <= visible_pxl and visible_line;
+
+end Behavioral;
