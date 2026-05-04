@@ -1,0 +1,57 @@
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+use IEEE.NUMERIC_STD.ALL;
+
+library WORK;
+use WORK.VGA_PKG.ALL;
+
+entity top_vga is
+    Port ( 
+        clk         : in  STD_LOGIC; 
+        btnCpuReset : in  STD_LOGIC; 
+        vgaRed      : out STD_LOGIC_VECTOR (c_nb_red-1 downto 0);
+        vgaGreen    : out STD_LOGIC_VECTOR (c_nb_green-1 downto 0);
+        vgaBlue     : out STD_LOGIC_VECTOR (c_nb_blue-1 downto 0);
+        Hsync       : out STD_LOGIC;
+        Vsync       : out STD_LOGIC
+    );
+end top_vga;
+
+architecture Behavioral of top_vga is
+
+    signal w_visible  : STD_LOGIC;
+    signal w_fila_slv : STD_LOGIC_VECTOR(9 downto 0);
+    signal w_col_slv  : STD_LOGIC_VECTOR(9 downto 0);
+    
+    signal w_fila_uns : unsigned(9 downto 0);
+    signal w_col_uns  : unsigned(9 downto 0);
+    signal rst_activo_alto : STD_LOGIC;
+
+begin
+
+    rst_activo_alto <= not btnCpuReset;
+    w_fila_uns <= unsigned(w_fila_slv);
+    w_col_uns  <= unsigned(w_col_slv);
+
+    inst_vga_ctrl: entity work.vga_controller
+        port map (
+            clk     => clk,
+            rst     => rst_activo_alto,
+            hsinc   => Hsync,
+            vsinc   => Vsync,
+            visible => w_visible,
+            Fila    => w_fila_slv,
+            col     => w_col_slv
+        );
+
+    inst_pinta_barras: entity work.pinta_barras
+        port map (
+            visible => w_visible,
+            col     => w_col_uns,
+            fila    => w_fila_uns,
+            rojo    => vgaRed,
+            verde   => vgaGreen,
+            azul    => vgaBlue
+        );
+
+end Behavioral;
